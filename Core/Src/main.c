@@ -22,7 +22,6 @@
 #include "main.h"
 #include <stdbool.h>
 #include "PID.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -40,11 +39,12 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define PWM_Period 800
+#define PWM_Period 18000
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+
 SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef hdma_spi3_rx;
 
@@ -53,16 +53,16 @@ TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim16;
 
 
-extern uint64_t m1Enc ,m2Enc, m3Enc, m4Enc;
-GPIO_PinState m1A, m1B, m2A, m2B, m3A, m3B, m4A, m4B;
+extern int64_t m1Enc ,m2Enc, m3Enc, m4Enc;
+int m1A, m1B, m2A, m2B, m3A, m3B, m4A, m4B;
 float M1Out, M2Out, M3Out, M4Out;
 
 extern bool m1Homed, m2Homed , m3Homed , m4Homed ;
 
-PID_Config M1 ;
-PID_Config M2 ;
-PID_Config M3 ;
-PID_Config M4 ;
+PidType M1 ;
+PidType M2 ;
+PidType M3 ;
+PidType M4 ;
 
 int64_t M1SetPoint, M2SetPoint, M3SetPoint, M4SetPoint;
 int16_t _TXData[6];
@@ -80,8 +80,8 @@ static void MX_SPI3_Init(void);
 static void MX_TIM7_Init(void);
 void runControllers(void);
 void HomeMotors(int motor);
+void ConfigCOntrollers();
 int PCLK1_Freq;
-
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -124,23 +124,32 @@ int main(void)
 	MX_TIM16_Init();
 	MX_SPI3_Init();
 	MX_TIM7_Init();
+	ConfigControllers();
+
+	M1SetPoint = 342000;
+	M2SetPoint = 342000;
+	M3SetPoint = 342000;
+	M4SetPoint = 300;
+
+
 	PCLK1_Freq = HAL_RCC_GetPCLK2Freq();
 	if (HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1) != HAL_OK)
 	{
 		Error_Handler();
 	}
-	if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK)
+	if (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK)
 	{
 		Error_Handler();
 	}
-	if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK)
+	if (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2) != HAL_OK)
 	{
 		Error_Handler();
 	}
-	if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
+	if (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
 	{
 		Error_Handler();
 	}
+	__HAL_TIM_SET_AUTORELOAD(&htim16, PCLK1_Freq / PWM_Period);
 
 	__HAL_TIM_SET_AUTORELOAD(&htim1, PCLK1_Freq / PWM_Period);
 
@@ -149,30 +158,41 @@ int main(void)
 
 	HAL_TIM_MspPostInit(&htim1);
 	HAL_TIM_MspPostInit(&htim16);
-
+	//
 	__HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, 0);
 	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,0);
 	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2,0);
 	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,0);
-	/* USER CODE BEGIN 2 */
+	//	/* USER CODE BEGIN 2 */
+	//
+	//	//TODO: Init controller variables here
+	//
+	//	/* USER CODE END 2 */
+	//	HomeMotors(1);
+	//	HomeMotors(2);
+	//	HomeMotors(3);
+	//	HomeMotors(4);
 
-	//TODO: Init controller variables here
 
-	/* USER CODE END 2 */
 	HAL_SPI_Receive_DMA(&hspi3, _TXData, 6);
-
+	//
 	MX_TIM7_Init();
 	HAL_TIM_Base_Start(&htim7);
 
 	__HAL_TIM_SET_COUNTER(&htim7, 1);
 	__HAL_TIM_ENABLE_IT(&htim7, TIM_IT_UPDATE);
+	//
 
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
 		HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 		HAL_Delay(100);
+		__HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, PCLK1_Freq / PWM_Period * 0.2 );
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, PCLK1_Freq / PWM_Period * 0.2 );
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, PCLK1_Freq / PWM_Period * 0.2 );
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, PCLK1_Freq / PWM_Period * 0.2 );
+
+
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
@@ -304,10 +324,10 @@ static void MX_TIM1_Init(void)
 		Error_Handler();
 	}
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
+	sConfigOC.Pulse = 800;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+	sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
 	sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
 	sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
 	if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -364,7 +384,7 @@ static void MX_TIM7_Init(void)
 	htim7.Instance = TIM7;
 	htim7.Init.Prescaler = 0;
 	htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim7.Init.Period = 1000;
+	htim7.Init.Period = 10000;
 	htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
 	{
@@ -416,7 +436,7 @@ static void MX_TIM16_Init(void)
 		Error_Handler();
 	}
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
+	sConfigOC.Pulse = 800;
 	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
 	sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -496,8 +516,8 @@ static void MX_GPIO_Init(void)
 	GPIO_InitStruct.Pin = m1EncA_Pin|m1EncB_Pin|m2EncA_Pin|m2EncB_Pin
 			|m3EncA_Pin|m3EncB_Pin|m4EncA_Pin|m4EncB_Pin
 			|ls1_Pin|cs_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+	GPIO_InitStruct.Pull = GPIO_PULLDOWN;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 	/*Configure GPIO pins : m2Dir_Pin m4Dir_Pin */
@@ -528,7 +548,7 @@ static void MX_GPIO_Init(void)
 
 	/* EXTI interrupt init*/
 	HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-	HAL_NVIC_EnableIRQ(EXTI0_IRQn);M1SetPoint
+	HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
 	HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
 	HAL_NVIC_EnableIRQ(EXTI1_IRQn);
@@ -549,10 +569,6 @@ static void MX_GPIO_Init(void)
 	HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
-
-
-
-
 
 //                           _______         _______
 //               Pin1 ______|       |_______|       |______ Pin1
@@ -606,28 +622,28 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	//Encoder interrupts
 
 	else if(GPIO_Pin == GPIO_PIN_0||GPIO_Pin == GPIO_PIN_1){//9cs
-		int encA = m1EncA_GPIO_Port->IDR;
-		int encB = m1EncB_GPIO_Port->IDR;
-		if ((m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET )||
-				(m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET )||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET )||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET )){
+		int encA = HAL_GPIO_ReadPin(m1EncA_GPIO_Port, m1EncA_Pin);
+		int encB = HAL_GPIO_ReadPin(m1EncB_GPIO_Port, m1EncB_Pin);
+		if ((m1A == 0 && m1B == 0 && encA == 0 && encB == 0 )||
+				(m1A == 0 && m1B == 1 && encA == 0 && encB == 1 )||
+				(m1A == 1 && m1B == 0 && encA == 1 && encB == 0 )||
+				(m1A == 1 && m1B == 1 && encA == 1 && encB == 1 )){
 			m1Enc+=0;
 		}
-		else if ((m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)||
-				(m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)){
+		else if ((m1A == 0 && m1B == 0 && encA == 0 && encB == 1)||
+				(m1A == 0 && m1B == 1 && encA == 1 && encB == 1)||
+				(m1A == 1 && m1B == 1 && encA == 1 && encB == 0)||
+				(m1A == 1 && m1B == 0 && encA == 0 && encB == 0)){
 
 			m1Enc+=1;
 			m1A = encA;
 			m1B = encB;
 
 		}
-		else if ((m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m1A == GPIO_PIN_RESET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_RESET &&encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m1A == GPIO_PIN_SET && m1B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)){
+		else if ((m1A == 0 && m1B == 0 && encA == 1 && encB == 0)||
+				(m1A == 0 && m1B == 1 && encA == 0 && encB == 0)||
+				(m1A == 1 && m1B == 0 &&encA == 1 && encB == 1)||
+				(m1A == 1 && m1B == 1 && encA == 0 && encB == 1)){
 
 			m1Enc-=1;
 			m1A = encA;
@@ -636,29 +652,29 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		}
 
 	}
-	else if(GPIO_Pin == GPIO_PIN_0||GPIO_Pin == GPIO_PIN_1){
-		int encA = m2EncA_GPIO_Port->IDR;
-		int encB = m2EncB_GPIO_Port->IDR;
-		if ((m1A == GPIO_PIN_RESET && m2B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET )||
-				(m2A == GPIO_PIN_RESET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET )||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET )||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET )){
+	else if(GPIO_Pin == GPIO_PIN_2||GPIO_Pin == GPIO_PIN_4){
+		int encA = HAL_GPIO_ReadPin(m2EncA_GPIO_Port, m2EncA_Pin);
+		int encB = HAL_GPIO_ReadPin(m2EncB_GPIO_Port, m2EncB_Pin);
+		if ((m2A == 0 && m2B == 0 && encA == 0 && encB == 0 )||
+				(m2A == 0 && m2B == 1 && encA == 0 && encB == 1 )||
+				(m2A == 1 && m2B == 0 && encA == 1 && encB == 0 )||
+				(m2A == 1 && m2B == 1 && encA == 1 && encB == 1 )){
 			m2Enc+=0;
 		}
-		else if ((m2A == GPIO_PIN_RESET && m2B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)||
-				(m2A == GPIO_PIN_RESET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)){
+		else if ((m2A == 0 && m2B == 0 && encA == 0 && encB == 1)||
+				(m2A == 0 && m2B == 1 && encA == 1 && encB == 1)||
+				(m2A == 1 && m2B == 1 && encA == 1 && encB == 0)||
+				(m2A == 1 && m2B == 0 && encA == 0 && encB == 0)){
 
 			m2Enc+=1;
 			m2A = encA;
 			m2B = encB;
 
 		}
-		else if ((m2A == GPIO_PIN_RESET && m2B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m2A == GPIO_PIN_RESET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_RESET &&encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m2A == GPIO_PIN_SET && m2B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)){
+		else if ((m2A == 0 && m2B == 0 && encA == 1 && encB == 0)||
+				(m2A == 0 && m2B == 1 && encA == 0 && encB == 0)||
+				(m2A == 1 && m2B == 0 &&encA == 1 && encB == 1)||
+				(m2A == 1 && m2B == 1 && encA == 0 && encB == 1)){
 
 			m2Enc-=1;
 			m2A = encA;
@@ -667,29 +683,29 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		}
 
 	}
-	else if(GPIO_Pin == GPIO_PIN_0||GPIO_Pin == GPIO_PIN_1){
-		int encA = m3EncA_GPIO_Port->IDR;
-		int encB = m3EncB_GPIO_Port->IDR;
-		if ((m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET )||
-				(m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET )||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET )||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET )){
-			m3Enc+=0;
+	else if(GPIO_Pin == GPIO_PIN_5||GPIO_Pin == GPIO_PIN_8){
+		int encA = HAL_GPIO_ReadPin(m3EncA_GPIO_Port, m3EncA_Pin);
+		int encB = HAL_GPIO_ReadPin(m3EncB_GPIO_Port, m3EncB_Pin);
+		if ((m3A == 0 && m3B == 0 && encA == 0 && encB == 0 )||
+				(m3A == 0 && m3B == 1 && encA == 0 && encB == 1 )||
+				(m3A == 1 && m3B == 0 && encA == 1 && encB == 0 )||
+				(m3A == 1 && m3B == 1 && encA == 1 && encB == 1 )){
+			//m3Enc+=0;
 		}
-		else if ((m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)||
-				(m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)){
+		else if ((m3A == 0 && m3B == 0 && encA == 0 && encB == 1)||
+				(m3A == 0 && m3B == 1 && encA == 1 && encB == 1)||
+				(m3A == 1 && m3B == 1 && encA == 1 && encB == 0)||
+				(m3A == 1 && m3B == 0 && encA == 0 && encB == 0)){
 
 			m3Enc+=1;
 			m3A = encA;
 			m3B = encB;
 
 		}
-		else if ((m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m3A == GPIO_PIN_RESET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_RESET &&encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m3A == GPIO_PIN_SET && m3B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)){
+		else if ((m3A == 0 && m3B == 0 && encA == 1 && encB == 1)||
+				(m3A == 0 && m3B == 1 && encA == 0 && encB == 1)||
+				(m3A == 1 && m3B == 0 &&encA == 1 && encB == 0)||
+				(m3A == 1 && m3B == 1 && encA == 0 && encB == 0)){
 
 			m3Enc-=1;
 			m3A = encA;
@@ -698,31 +714,31 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		}
 
 	}
-	else if(GPIO_Pin == GPIO_PIN_0||GPIO_Pin == GPIO_PIN_1){
-		int encA = m4EncA_GPIO_Port->IDR;
-		int encB = m4EncB_GPIO_Port->IDR;
-		if ((m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET )||
-				(m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET )||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET )||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET )){
+	else if(GPIO_Pin == GPIO_PIN_9||GPIO_Pin == GPIO_PIN_10){
+		int encA = HAL_GPIO_ReadPin(m4EncA_GPIO_Port, m4EncA_Pin);
+		int encB = HAL_GPIO_ReadPin(m4EncB_GPIO_Port, m4EncB_Pin);
+		if ((m4A == 0 && m4B == 0 && encA == 0 && encB == 0 )||
+				(m4A == 0 && m4B == 1 && encA == 0 && encB == 1 )||
+				(m4A == 1 && m4B == 0 && encA == 1 && encB == 0 )||
+				(m4A == 1 && m4B == 1 && encA == 1 && encB == 1 )){
 			m4Enc+=0;
 		}
-		else if ((m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)||
-				(m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_RESET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)){
+		else if ((m4A == 0 && m4B == 0 && encA == 0 && encB == 1)||
+				(m4A == 0 && m4B == 1 && encA == 1 && encB == 1)||
+				(m4A == 1 && m4B == 1 && encA == 1 && encB == 0)||
+				(m4A == 1 && m4B == 0 && encA == 0 && encB == 0)){
 
-			m4Enc+=1;
+			m4Enc++;
 			m4A = encA;
 			m4B = encB;
 
 		}
-		else if ((m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_RESET && encA == GPIO_PIN_SET && encB == GPIO_PIN_RESET)||
-				(m4A == GPIO_PIN_RESET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_RESET)||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_RESET &&encA == GPIO_PIN_SET && encB == GPIO_PIN_SET)||
-				(m4A == GPIO_PIN_SET && m4B == GPIO_PIN_SET && encA == GPIO_PIN_RESET && encB == GPIO_PIN_SET)){
+		else if ((m4A == 0 && m4B == 0 && encA == 1 && encB == 0)||
+				(m4A == 0 && m4B == 1 && encA == 0 && encB == 0)||
+				(m4A == 1 && m4B == 0 &&encA == 1 && encB == 1)||
+				(m4A == 1 && m4B == 1 && encA == 0 && encB == 1)){
 
-			m4Enc-=1;
+			m4Enc--;
 			m4A = encA;
 			m4B = encB;
 
@@ -776,68 +792,25 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 		else if(_TXData[0]==0xAA){
 			//Set PIDS
 			if(_TXData[1] == 1){
-				setPID(M1, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
+
+				PID_SetTunings(&M1, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
 			}
 
 			else if(_TXData[1] == 2){
-				setPID(M2, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
+				PID_SetTunings(&M2, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
 
 			}
 
 			else if(_TXData[1] == 3){
-				setPID(M3, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
+				PID_SetTunings(&M3, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
 
 			}
 
 			else if(_TXData[1] == 4){
-				setPID(M4, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
+				PID_SetTunings(&M4, (float)(_TXData[2]/100), (float)(_TXData[3]/100), (float)(_TXData[4]/100));
 
 			}
 		}
-		else if(_TXData[0]==0xAB){
-			//Set grav
-			if(_TXData[1] == 1){
-				setGrav(M1, (float)(_TXData[2]/1000));
-			}
-
-			else if(_TXData[1] == 2){
-				setGrav(M2, (float)(_TXData[2]/1000));
-
-			}
-
-			else if(_TXData[1] == 3){
-				setGrav(M3, (float)(_TXData[2]/1000));
-
-			}
-
-			else if(_TXData[1] == 4){
-				setGrav(M4, (float)(_TXData[2]/1000));
-
-			}
-		}
-		else if(_TXData[0]==0xAC){
-			//Set coriolis
-			if(_TXData[1] == 1){
-				setCor(M1, (float)(_TXData[2]/1000));
-			}
-
-			else if(_TXData[1] == 2){
-				setCor(M2, (float)(_TXData[2]/1000));
-
-			}
-
-			else if(_TXData[1] == 3){
-				setCor(M3, (float)(_TXData[2]/1000));
-
-			}
-
-			else if(_TXData[1] == 4){
-				setCor(M4, (float)(_TXData[2]/1000));
-
-			}
-		}
-
-
 
 	}
 
@@ -845,22 +818,26 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
 void runControllers(){
 
-	setSetpoint(M1, M1SetPoint);
-	setPos(M1, m1Enc);
-	M1Out = Compute(M1);
 
-	setSetpoint(M2, M1SetPoint);
-	setPos(M2, m2Enc);
-	M3Out = Compute(M2);
+	M1.mySetpoint = M1SetPoint;
+	M1.myInput = m1Enc;
+	PID_Compute(&M1);
+	M1Out = M1.myOutput;
 
-	setSetpoint(M3, M3SetPoint);
-	setPos(M3, m3Enc);
-	M3Out = Compute(M3);
+	M2.mySetpoint = M2SetPoint;
+	M2.myInput = m2Enc;
+	PID_Compute(&M2);
+	M2Out = M2.myOutput;
 
-	setSetpoint(M4, M4SetPoint);
-	setPos(M4, m4Enc);
-	M4Out = Compute(M4);
+	M3.mySetpoint = M3SetPoint;
+	M3.myInput = m3Enc;
+	PID_Compute(&M3);
+	M3Out = M3.myOutput;
 
+	M4.mySetpoint = M4SetPoint;
+	M4.myInput = m4Enc;
+	PID_Compute(&M4);
+	M4Out = M4.myOutput;
 
 
 	if(M1Out>0){
@@ -869,6 +846,8 @@ void runControllers(){
 	}
 	else if (M1Out<0){
 		m1Dir_GPIO_Port->ODR &= ~m1Dir_Pin; //Set m1Dir pin Low
+		HAL_GPIO_WritePin(m1Dir_GPIO_Port, m1Dir_Pin, GPIO_PIN_SET);
+		M1Out = M1Out*-1;
 
 	}
 	else if(M1Out == 0){
@@ -879,9 +858,12 @@ void runControllers(){
 	if(M2Out>0){
 		m2Dir_GPIO_Port->ODR |= m2Dir_Pin; //Set m1Dir pin high
 
+
 	}
 	else if (M2Out<0){
 		m2Dir_GPIO_Port->ODR &= ~m2Dir_Pin; //Set m1Dir pin Low
+		M2Out = M2Out*-1;
+
 
 	}
 	else if(M2Out == 0){
@@ -895,6 +877,7 @@ void runControllers(){
 	}
 	else if (M3Out<0){
 		m3Dir_GPIO_Port->ODR &= ~m3Dir_Pin; //Set m1Dir pin Low
+		M3Out = M3Out*-1;
 
 	}
 	else if(M3Out == 0){
@@ -903,11 +886,12 @@ void runControllers(){
 	__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, PCLK1_Freq / PWM_Period * M3Out );
 
 	if(M4Out>0){
-		m4Dir_GPIO_Port->ODR |= m4Dir_Pin; //Set m1Dir pin high
+		HAL_GPIO_WritePin(m4Dir_GPIO_Port, m4Dir_Pin, GPIO_PIN_SET);
 
 	}
 	else if (M4Out<0){
-		m4Dir_GPIO_Port->ODR &= ~m4Dir_Pin; //Set m1Dir pin Low
+		HAL_GPIO_WritePin(m4Dir_GPIO_Port, m4Dir_Pin, GPIO_PIN_RESET);
+		M4Out = M4Out+1;
 
 	}
 	else if(M4Out == 0){
@@ -950,6 +934,19 @@ void HomeMotors(int motor){
 	}
 
 }
+
+void ConfigControllers(){
+	PID_init(&M1, 10, 0, 0, 0);
+	PID_SetOutputLimits(&M1, -0.4, 0.4);
+	PID_init(&M2, 10, 0, 0, 0);
+	PID_SetOutputLimits(&M2, -0.4, 0.4);
+	PID_init(&M3, 10, 0, 0, 0);
+	PID_SetOutputLimits(&M3, -0.4, 0.4);
+	PID_init(&M4, 10, 0, 0, 0);
+	PID_SetOutputLimits(&M4, -0.4, 0.4);
+
+}
+
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */

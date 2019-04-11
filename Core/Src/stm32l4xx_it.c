@@ -22,6 +22,7 @@
 #include "main.h"
 #include "stm32l4xx_it.h"
 #include <stdbool.h>
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -59,11 +60,9 @@
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_spi3_rx;
 extern TIM_HandleTypeDef htim7;
-
-uint64_t m1Enc = 0, m2Enc = 0, m3Enc = 0, m4Enc = 0;
-bool m1Homed = false, m2Homed = false, m3Homed = false, m4Homed = false;
 /* USER CODE BEGIN EV */
-
+int64_t m1Enc = 0, m2Enc = 0, m3Enc = 0, m4Enc = 0;
+bool m1Homed = false, m2Homed = false, m3Homed = false, m4Homed = false;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -315,7 +314,7 @@ void TIM7_IRQHandler(void)
 
   /* USER CODE END TIM7_IRQn 0 */
   HAL_TIM_IRQHandler(&htim7);
-  runControllers();
+runControllers();
   /* USER CODE BEGIN TIM7_IRQn 1 */
 
   /* USER CODE END TIM7_IRQn 1 */

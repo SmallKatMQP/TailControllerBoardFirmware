@@ -4,7 +4,7 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../Application/User/Core/PID.c \
+/home/kbisland/TailController/Core/Src/PID.c \
 /home/kbisland/TailController/Core/Src/main.c \
 /home/kbisland/TailController/Core/Src/stm32l4xx_hal_msp.c \
 /home/kbisland/TailController/Core/Src/stm32l4xx_it.c 
@@ -23,7 +23,7 @@ C_DEPS += \
 
 
 # Each subdirectory must supply rules for building sources it contributes
-Application/User/Core/%.o: ../Application/User/Core/%.c
+Application/User/Core/PID.o: /home/kbisland/TailController/Core/Src/PID.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: MCU GCC Compiler'
 	@echo $(PWD)
